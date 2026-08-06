@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autonomous Coding Agent (Cline Inspired)</title>
+    <style>
+        :root {
+            --bg-base: #1e1e1e;
+            --bg-sidebar: #252526;
+            --bg-panel: #2d2d2d;
+            --accent: #007acc;
+            --accent-hover: #0098ff;
+            --text-main: #cccccc;
+            --text-bright: #ffffff;
+            --border: #3f3f46;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: var(--bg-base); color: var(--text-main); display: flex; height: 100vh; overflow: hidden; }
+        
+        /* Layout Grid */
+        sidebar { width: 260px; background: var(--bg-sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+        main { flex: 1; display: flex; flex-direction: column; height: 100vh; }
+        pane-container { flex: 1; display: flex; height: calc(100vh - 40px); }
+        
+        /* Sidebar Components */
+        .sidebar-header { padding: 12px; font-weight: bold; color: var(--text-bright); border-bottom: 1px solid var(--border); }
+        .file-list { list-style: none; overflow-y: auto; padding: 8px; flex: 1; font-size: 13px; }
+        .file-list li { padding: 6px 8px; cursor: pointer; border-radius: 4px; }
+        .file-list li:hover { background: var(--border); color: var(--text-bright); }
+
+        /* Chat & Workspace Viewport */
+        .workspace-panel { flex: 2; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+        .chat-panel { flex: 1; display: flex; flex-direction: column; background: var(--bg-base); }
+        
+        .chat-history { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; font-size: 14px; }
+        .message { padding: 10px 14px; border-radius: 6px; max-width: 85%; line-height: 1.4; }
+        .message.user { background: var(--accent); color: white; align-self: flex-end; }
+        .message.agent { background: var(--bg-panel); color: var(--text-bright); border: 1px solid var(--border); align-self: flex-start; }
+        
+        .chat-input-box { padding: 12px; background: var(--bg-sidebar); display: flex; gap: 8px; border-top: 1px solid var(--border); }
+        input, textarea { background: var(--bg-base); border: 1px solid var(--border); color: var(--text-bright); padding: 8px 12px; border-radius: 4px; outline: none; }
+        input:focus, textarea:focus { border-color: var(--accent); }
+        
+        button { background: var(--accent); color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background: var(--accent-hover); }
+
+        /* Code Workspace Editor */
+        #code-editor { width: 100%; height: 100%; background: #181818; color: #d4d4d4; font-family: 'Courier New', Courier, monospace; padding: 12px; border: none; resize: none; outline: none; font-size: 14px; line-height: 1.5; }
+        
+        .config-bar { padding: 8px 12px; background: #111; display: flex; gap: 12px; align-items: center; border-bottom: 1px solid var(--border); font-size: 12px; }
+        .config-bar input { width: 300px; }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar File Explorer -->
+    <sidebar>
+        <div class="sidebar-header">Files</div>
+        <ul id="fileList" class="file-list">
+            <li onclick="loadFile('package.json')">package.json</li>
+            <li onclick="loadFile('src/index.ts')">src/index.ts</li>
+        </ul>
+    </sidebar>
+
+    <!-- Main Dynamic Workspace -->
+    <main>
+        <div class="config-bar">
+            <span>Gemini Keys Pool: <strong id="keyCount">5 Keys Loaded</strong></span>
+            <span>Backend Status: <strong id="serverStatus" style="color: #4ec9b0;">Connected</strong></span>
+        </div>
+        <pane-container>
+            <!-- Code Viewer/Editor Panel -->
+            <div class="workspace-panel">
+                <textarea id="code-editor" placeholder="Select a file from the sidebar to inspect..."></textarea>
+            </div>
+            <!-- Autonomous Agent Chat Panel -->
+            <div class="chat-panel">
+                <div id="chatHistory" class="chat-history">
+                    <div class="message agent">Hello! I am your autonomous coding agent. Give me a task, and I will loop through your 5 Gemini API keys to execute file modifications and shell commands.</div>
+                </div>
+                <div class="chat-input-box">
+                    <input type="text" id="userInput" placeholder="Ask agent to build or fix something..." style="flex: 1;" onkeypress="if(event.key==='Enter') triggerAgent()">
+                    <button onclick="triggerAgent()">Run Agent</button>
+                </div>
+            </div>
+        </pane-container>
+    </main>
+
+    <script>
+        const BACKEND_URL = "http://localhost:3000";
+
+        async function loadFile(path) {
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/files?path=${path}`);
+                const data = await res.json();
+                document.getElementById('code-editor').value = data.content || '';
+            } catch (err) {
+                console.error("Failed to load file:", err);
+            }
+        }
+
+        async function triggerAgent() {
+            const input = document.getElementById('userInput');
+            const prompt = input.value.trim();
+            if (!prompt) return;
+
+            const chatHistory = document.getElementById('chatHistory');
+            chatHistory.innerHTML += `<div class="message user">${prompt}</div>`;
+            input.value = '';
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/agent`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt })
+                });
+                const data = await res.json();
+                chatHistory.innerHTML += `<div class="message agent">${data.reply}</div>`;
+            } catch (err) {
+                chatHistory.innerHTML += `<div class="message agent" style="color: #f14c4c;">Error communicating with agent backend server.</div>`;
+            }
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+    </script>
+</body>
+</html>
